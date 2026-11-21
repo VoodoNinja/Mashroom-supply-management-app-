@@ -21,10 +21,12 @@ h3{margin:0 0 10px}label{font-size:13px;color:#53645a}
 <header><h2 id="brand">Mushroom Supply Manager</h2><small>Oyster Mushroom Business Manager</small></header>
 <div class="wrap">
 <section id="login" class="card">
-<h3>मोबाइल OTP Login</h3><label>मोबाइल नंबर (भारत)</label><input id="phone" placeholder="+91XXXXXXXXXX" inputmode="tel">
-<div id="recaptcha-container"></div><button id="sendOtp">OTP भेजें</button>
-<div id="otpArea" class="hidden"><label>SMS में आया OTP</label><input id="otp" inputmode="numeric" placeholder="6 digit OTP"><button id="verifyOtp">Login करें</button></div>
-<p class="muted" id="loginMsg">लॉगिन के लिए अपना मोबाइल नंबर डालें।</p>
+<h3>मोबाइल नंबर से Login / Register</h3>
+<label>मोबाइल नंबर (भारत)</label><input id="phone" placeholder="+91XXXXXXXXXX" inputmode="tel">
+<label>पासवर्ड (कम से कम 6 अक्षर)</label><input id="password" type="password" placeholder="अपना पासवर्ड बनाएं">
+<button id="registerBtn">नया अकाउंट बनाएं</button>
+<button id="loginBtn" class="secondary">पहले से अकाउंट है? Login करें</button>
+<p class="muted" id="loginMsg">पहली बार उपयोग कर रहे हैं तो नया अकाउंट बनाएं। अगली बार उसी नंबर और पासवर्ड से Login करें।</p>
 </section>
 <section id="app" class="hidden">
 <nav>
@@ -58,7 +60,7 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const auth=firebase.auth(), db=firebase.firestore();
-let confirmation=null, uid=null, deferredInstall=null, cache={customers:[],orders:[],payments:[]};
+let uid=null, deferredInstall=null, cache={customers:[],orders:[],payments:[]};
 const $=id=>document.getElementById(id), money=n=>'₹'+Number(n||0).toLocaleString('en-IN');
 function msg(t){$('loginMsg').textContent=t}
 function userCol(name){return db.collection('users').doc(uid).collection(name)}
@@ -83,13 +85,26 @@ function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;',
 function attr(s){return String(s).replace(/['"\\]/g,'')}
 window.callCustomer=p=>{if(p)location.href='tel:'+p};
 window.waCustomer=(p,n)=>{if(p)window.open('https://wa.me/'+p.replace(/\D/g,'')+'?text='+encodeURIComponent('नमस्ते '+n+', Mushroom supply के संबंध में।'),'_blank')};
-$('sendOtp').onclick=async()=>{
- const p=$('phone').value.trim(); if(!/^\+\d{10,15}$/.test(p)){msg('नंबर +91XXXXXXXXXX फॉर्मेट में डालें।');return}
- try{if(!window.recaptchaVerifier)window.recaptchaVerifier=new firebase.auth.RecaptchaVerifier('recaptcha-container',{size:'normal'});
- confirmation=await auth.signInWithPhoneNumber(p,window.recaptchaVerifier);$('otpArea').classList.remove('hidden');msg('OTP भेज दिया गया है।')}
- catch(e){msg('OTP error: '+e.message);if(window.recaptchaVerifier){window.recaptchaVerifier.clear();window.recaptchaVerifier=null}}
+function phoneToEmail(phone){
+ const digits=phone.replace(/\D/g,'');
+ return digits+'@phone.mushroomsupply.app';
+}
+function validPhone(phone){return /^\+\d{10,15}$/.test(phone)}
+function validPassword(p){return typeof p==='string' && p.length>=6}
+$('registerBtn').onclick=async()=>{
+ const p=$('phone').value.trim(), pass=$('password').value;
+ if(!validPhone(p)){msg('मोबाइल नंबर +91XXXXXXXXXX फॉर्मेट में डालें।');return}
+ if(!validPassword(pass)){msg('पासवर्ड कम से कम 6 अक्षर का होना चाहिए।');return}
+ try{await auth.createUserWithEmailAndPassword(phoneToEmail(p),pass);msg('अकाउंट बन गया और Login हो गया।')}
+ catch(e){msg(e.code==='auth/email-already-in-use'?'इस नंबर का अकाउंट पहले से है। Login करें।':'Register error: '+e.message)}
 };
-$('verifyOtp').onclick=async()=>{try{await confirmation.confirm($('otp').value.trim());msg('Login सफल।')}catch(e){msg('OTP verify नहीं हुआ: '+e.message)}};
+$('loginBtn').onclick=async()=>{
+ const p=$('phone').value.trim(), pass=$('password').value;
+ if(!validPhone(p)){msg('मोबाइल नंबर +91XXXXXXXXXX फॉर्मेट में डालें।');return}
+ if(!pass){msg('अपना पासवर्ड डालें।');return}
+ try{await auth.signInWithEmailAndPassword(phoneToEmail(p),pass);msg('Login सफल।')}
+ catch(e){msg(e.code==='auth/invalid-credential' || e.code==='auth/wrong-password'?'मोबाइल नंबर या पासवर्ड गलत है।':'Login error: '+e.message)}
+};
 auth.onAuthStateChanged(async u=>{if(u){uid=u.uid;$('login').classList.add('hidden');$('app').classList.remove('hidden');await loadAll()}else{$('login').classList.remove('hidden');$('app').classList.add('hidden');uid=null}});
 $('addCustomer').onclick=async()=>{const name=$('cname').value.trim();if(!name)return alert('ग्राहक का नाम डालें');await userCol('customers').add({name,phone:$('cphone').value.trim(),address:$('caddress').value.trim(),createdAt:firebase.firestore.FieldValue.serverTimestamp()});['cname','cphone','caddress'].forEach(x=>$(x).value='');await loadAll()};
 $('addOrder').onclick=async()=>{const customer=$('ocustomer').value.trim(),qty=Number($('qty').value),rate=Number($('rate').value);if(!customer||qty<=0||rate<0)return alert('ग्राहक, मात्रा और रेट सही भरें');await userCol('orders').add({customer,qty,rate,total:qty*rate,date:$('odate').value||new Date().toISOString().slice(0,10),createdAt:firebase.firestore.FieldValue.serverTimestamp()});['ocustomer','qty','rate','odate'].forEach(x=>$(x).value='');await loadAll()};
