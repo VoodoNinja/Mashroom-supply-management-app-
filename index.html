@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#176b45"><link rel="manifest" href="manifest.webmanifest">
+<title>Mushroom Supply Manager</title>
+<style>
+:root{font-family:system-ui,Arial,sans-serif;color:#17251e;background:#f3f7f4}*{box-sizing:border-box}
+body{margin:0}header{background:#176b45;color:white;padding:18px 16px;position:sticky;top:0;z-index:2}
+header h2{margin:0;font-size:20px}header small{opacity:.85}.wrap{max-width:760px;margin:auto;padding:14px}
+.card{background:white;border-radius:14px;padding:16px;margin:12px 0;box-shadow:0 2px 10px #163b2410}
+input,button,textarea{font:inherit;width:100%;padding:12px;border-radius:9px;border:1px solid #ccd8d0;margin:6px 0}
+button{background:#176b45;color:white;border:0;font-weight:650;cursor:pointer}button.secondary{background:#e6f1ea;color:#176b45}
+nav{display:flex;gap:6px;flex-wrap:wrap}nav button{width:auto;flex:1;padding:10px 6px}
+.hidden{display:none!important}.muted{color:#66756c;font-size:13px}.item{border-bottom:1px solid #e7eee9;padding:10px 0}
+.row{display:flex;gap:8px}.row>*{flex:1;min-width:0}.danger{background:#a32d2d}
+h3{margin:0 0 10px}label{font-size:13px;color:#53645a}
+</style>
+</head>
+<body>
+<header><h2 id="brand">Mushroom Supply Manager</h2><small>Oyster Mushroom Business Manager</small></header>
+<div class="wrap">
+<section id="login" class="card">
+<h3>मोबाइल OTP Login</h3><label>मोबाइल नंबर (भारत)</label><input id="phone" placeholder="+91XXXXXXXXXX" inputmode="tel">
+<div id="recaptcha-container"></div><button id="sendOtp">OTP भेजें</button>
+<div id="otpArea" class="hidden"><label>SMS में आया OTP</label><input id="otp" inputmode="numeric" placeholder="6 digit OTP"><button id="verifyOtp">Login करें</button></div>
+<p class="muted" id="loginMsg">लॉगिन के लिए अपना मोबाइल नंबर डालें।</p>
+</section>
+<section id="app" class="hidden">
+<nav>
+<button data-tab="home">होम</button><button data-tab="customers">ग्राहक</button><button data-tab="orders">ऑर्डर</button><button data-tab="payments">पेमेंट</button><button data-tab="settings">सेटिंग</button>
+</nav>
+<div id="home" class="tab card"><h3>डैशबोर्ड</h3><div id="stats">लोड हो रहा है…</div><p class="muted">आपका डेटा आपके लॉगिन अकाउंट में अलग सुरक्षित रहता है।</p></div>
+<div id="customers" class="tab card hidden"><h3>नया ग्राहक</h3>
+<input id="cname" placeholder="ग्राहक / दुकान का नाम"><input id="cphone" placeholder="मोबाइल नंबर"><input id="caddress" placeholder="पता">
+<button id="addCustomer">ग्राहक सेव करें</button><h3>ग्राहक सूची</h3><div id="customerList"></div></div>
+<div id="orders" class="tab card hidden"><h3>नया ऑर्डर</h3>
+<input id="ocustomer" placeholder="ग्राहक का नाम"><div class="row"><input id="qty" type="number" step="0.1" placeholder="मात्रा (kg)"><input id="rate" type="number" step="0.01" placeholder="रेट ₹/kg"></div>
+<input id="odate" type="date"><button id="addOrder">ऑर्डर सेव करें</button><h3>ऑर्डर हिस्ट्री</h3><div id="orderList"></div></div>
+<div id="payments" class="tab card hidden"><h3>पेमेंट दर्ज करें</h3><input id="pcustomer" placeholder="ग्राहक का नाम"><div class="row"><input id="pamount" type="number" placeholder="राशि ₹"><input id="pnote" placeholder="नोट / तरीका"></div>
+<button id="addPayment">पेमेंट सेव करें</button><h3>पेमेंट हिस्ट्री</h3><div id="paymentList"></div></div>
+<div id="settings" class="tab card hidden"><h3>स्टोर सेटिंग</h3><label>स्टोर का नाम</label><input id="storeName" placeholder="आपकी दुकान का नाम"><label>WhatsApp नंबर (देश कोड सहित)</label><input id="storeWhatsApp" placeholder="91XXXXXXXXXX"><label>स्टोर का पता</label><textarea id="storeAddress" placeholder="पता"></textarea><button id="saveSettings">सेटिंग सेव करें</button>
+<button class="secondary" id="installBtn" class="hidden">फोन में ऐप इंस्टॉल करें</button><button class="danger" id="logout">Logout</button><p class="muted">हर यूजर का स्टोर नाम और रिकॉर्ड अलग रहेगा।</p></div>
+</section>
+</div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyB48qINUdfecyQmlzwX4mHQr_sa03rLMcI",
+  authDomain: "mashroom-supply-management-app.firebaseapp.com",
+  projectId: "mashroom-supply-management-app",
+  storageBucket: "mashroom-supply-management-app.firebasestorage.app",
+  messagingSenderId: "290634515997",
+  appId: "1:290634515997:web:a38ff76fa07f161dcf28f4",
+  measurementId: "G-BT4E1JE9HQ"
+};
+firebase.initializeApp(firebaseConfig);
+const auth=firebase.auth(), db=firebase.firestore();
+let confirmation=null, uid=null, deferredInstall=null, cache={customers:[],orders:[],payments:[]};
+const $=id=>document.getElementById(id), money=n=>'₹'+Number(n||0).toLocaleString('en-IN');
+function msg(t){$('loginMsg').textContent=t}
+function userCol(name){return db.collection('users').doc(uid).collection(name)}
+async function loadAll(){
+ for(const name of ['customers','orders','payments']){
+  const s=await userCol(name).orderBy('createdAt','desc').get().catch(()=>userCol(name).get());
+  cache[name]=s.docs.map(d=>({id:d.id,...d.data()}));
+ }
+ const ss=await db.collection('users').doc(uid).collection('settings').doc('main').get();
+ const st=ss.exists?ss.data():{};
+ $('storeName').value=st.storeName||'';$('storeWhatsApp').value=st.whatsapp||'';$('storeAddress').value=st.address||'';
+ $('brand').textContent=st.storeName||'Mushroom Supply Manager';render();
+}
+function render(){
+ $('customerList').innerHTML=cache.customers.map(x=>`<div class="item"><b>${esc(x.name)}</b><div class="muted">${esc(x.phone||'')} · ${esc(x.address||'')}</div><div class="row"><button class="secondary" onclick="callCustomer('${attr(x.phone||'')}')">Call</button><button class="secondary" onclick="waCustomer('${attr(x.phone||'')}','${attr(x.name||'')}')">WhatsApp</button></div></div>`).join('')||'<p class="muted">अभी ग्राहक नहीं हैं।</p>';
+ $('orderList').innerHTML=cache.orders.map(x=>`<div class="item"><b>${esc(x.customer)}</b> · ${x.qty} kg × ${money(x.rate)} = <b>${money(x.total)}</b><div class="muted">${esc(x.date||'')}</div></div>`).join('')||'<p class="muted">अभी ऑर्डर नहीं हैं।</p>';
+ $('paymentList').innerHTML=cache.payments.map(x=>`<div class="item"><b>${esc(x.customer)}</b> · ${money(x.amount)}<div class="muted">${esc(x.note||'')} · ${esc(x.date||'')}</div></div>`).join('')||'<p class="muted">अभी पेमेंट नहीं हैं।</p>';
+ const sales=cache.orders.reduce((a,x)=>a+Number(x.total||0),0), paid=cache.payments.reduce((a,x)=>a+Number(x.amount||0),0);
+ $('stats').innerHTML=`<div class="row"><div><b>${cache.customers.length}</b><div class="muted">ग्राहक</div></div><div><b>${cache.orders.length}</b><div class="muted">ऑर्डर</div></div></div><p>कुल ऑर्डर: <b>${money(sales)}</b></p><p>कुल प्राप्त पेमेंट: <b>${money(paid)}</b></p><p>बाकी अनुमानित: <b>${money(sales-paid)}</b></p>`;
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function attr(s){return String(s).replace(/['"\\]/g,'')}
+window.callCustomer=p=>{if(p)location.href='tel:'+p};
+window.waCustomer=(p,n)=>{if(p)window.open('https://wa.me/'+p.replace(/\D/g,'')+'?text='+encodeURIComponent('नमस्ते '+n+', Mushroom supply के संबंध में।'),'_blank')};
+$('sendOtp').onclick=async()=>{
+ const p=$('phone').value.trim(); if(!/^\+\d{10,15}$/.test(p)){msg('नंबर +91XXXXXXXXXX फॉर्मेट में डालें।');return}
+ try{if(!window.recaptchaVerifier)window.recaptchaVerifier=new firebase.auth.RecaptchaVerifier('recaptcha-container',{size:'normal'});
+ confirmation=await auth.signInWithPhoneNumber(p,window.recaptchaVerifier);$('otpArea').classList.remove('hidden');msg('OTP भेज दिया गया है।')}
+ catch(e){msg('OTP error: '+e.message);if(window.recaptchaVerifier){window.recaptchaVerifier.clear();window.recaptchaVerifier=null}}
+};
+$('verifyOtp').onclick=async()=>{try{await confirmation.confirm($('otp').value.trim());msg('Login सफल।')}catch(e){msg('OTP verify नहीं हुआ: '+e.message)}};
+auth.onAuthStateChanged(async u=>{if(u){uid=u.uid;$('login').classList.add('hidden');$('app').classList.remove('hidden');await loadAll()}else{$('login').classList.remove('hidden');$('app').classList.add('hidden');uid=null}});
+$('addCustomer').onclick=async()=>{const name=$('cname').value.trim();if(!name)return alert('ग्राहक का नाम डालें');await userCol('customers').add({name,phone:$('cphone').value.trim(),address:$('caddress').value.trim(),createdAt:firebase.firestore.FieldValue.serverTimestamp()});['cname','cphone','caddress'].forEach(x=>$(x).value='');await loadAll()};
+$('addOrder').onclick=async()=>{const customer=$('ocustomer').value.trim(),qty=Number($('qty').value),rate=Number($('rate').value);if(!customer||qty<=0||rate<0)return alert('ग्राहक, मात्रा और रेट सही भरें');await userCol('orders').add({customer,qty,rate,total:qty*rate,date:$('odate').value||new Date().toISOString().slice(0,10),createdAt:firebase.firestore.FieldValue.serverTimestamp()});['ocustomer','qty','rate','odate'].forEach(x=>$(x).value='');await loadAll()};
+$('addPayment').onclick=async()=>{const customer=$('pcustomer').value.trim(),amount=Number($('pamount').value);if(!customer||amount<=0)return alert('ग्राहक और पेमेंट राशि भरें');await userCol('payments').add({customer,amount,note:$('pnote').value.trim(),date:new Date().toISOString().slice(0,10),createdAt:firebase.firestore.FieldValue.serverTimestamp()});['pcustomer','pamount','pnote'].forEach(x=>$(x).value='');await loadAll()};
+$('saveSettings').onclick=async()=>{const data={storeName:$('storeName').value.trim(),whatsapp:$('storeWhatsApp').value.trim(),address:$('storeAddress').value.trim()};await db.collection('users').doc(uid).collection('settings').doc('main').set(data,{merge:true});$('brand').textContent=data.storeName||'Mushroom Supply Manager';alert('सेटिंग सेव हो गई।')};
+$('logout').onclick=()=>auth.signOut();
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(t=>t.classList.add('hidden'));$(b.dataset.tab).classList.remove('hidden')});
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;$('installBtn').classList.remove('hidden')});
+$('installBtn').onclick=async()=>{if(deferredInstall){deferredInstall.prompt();deferredInstall=null}};
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+</script>
+</body></html>
